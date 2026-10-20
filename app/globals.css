@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Sora", ui-sans-serif, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-nav: var(--nav);
+  --color-hero-foreground: var(--hero-foreground);
+  --color-hero-muted: var(--hero-muted);
+  --color-contact: var(--contact);
+  --color-contact-foreground: var(--contact-foreground);
+  --shadow-panel: var(--shadow-panel);
+}
+
+:root {
+  --background: oklch(0.97 0.006 280);
+  --foreground: oklch(0.2 0.03 280);
+  --surface: oklch(0.995 0.002 280);
+  --muted: oklch(0.92 0.012 280);
+  --muted-foreground: oklch(0.48 0.03 280);
+  --border: oklch(0.86 0.02 280);
+  --primary: oklch(0.5 0.2 275);
+  --primary-foreground: oklch(0.99 0.003 280);
+  --destructive: oklch(0.55 0.205 29);
+  --nav: oklch(0.18 0.04 280);
+  --hero-foreground: oklch(0.99 0.003 280);
+  --hero-muted: oklch(0.78 0.03 280);
+  --contact: oklch(0.64 0.16 148);
+  --contact-foreground: oklch(0.99 0.003 80);
+  --shadow-panel: 0 24px 60px color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
