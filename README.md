@@ -16,6 +16,16 @@ O agendamento da prévia é simulado: mostra horários livres e ocupados e termi
    - `ANTHROPIC_API_KEY`: chave da API da Anthropic (console.anthropic.com), usada pela IA. Cada importação tem um custo pequeno na sua conta da Anthropic.
 3. **Deploy.**
 
+## Aviso "Site perigoso" no Chrome
+
+Endereços novos em `*.vercel.app` com tela de senha às vezes são marcados por engano pelo Google Safe Browsing. Para pedir a revisão:
+
+1. Em search.google.com/search-console, adicione a propriedade do tipo **Prefixo do URL** com o endereço de produção do site.
+2. Escolha verificar por **Tag HTML**, copie só o valor de `content` e cadastre na Vercel como `GOOGLE_SITE_VERIFICATION`. Faça um novo deploy e clique em **Verificar**.
+3. Em **Segurança e ações manuais → Problemas de segurança**, clique em **Solicitar revisão**.
+
+Também é possível avisar o erro em safebrowsing.google.com/safebrowsing/report_error. Um domínio próprio (ex.: `demos.seudominio.com.br`) evita que o problema volte.
+
 ## Rodar localmente
 
 ```bash

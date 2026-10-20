@@ -5,6 +5,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Gerador de sites demo",
   robots: { index: false, follow: false },
+  // Código do Google Search Console, usado para provar que o site é seu e pedir a revisão de alertas.
+  ...(process.env["GOOGLE_SITE_VERIFICATION"]
+    ? { verification: { google: process.env["GOOGLE_SITE_VERIFICATION"] } }
+    : {}),
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };
