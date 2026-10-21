@@ -33,8 +33,9 @@ import {
 
 const STORAGE_KEY = "demo-builder:saved";
 const DRAFT_KEY = "demo-builder:draft";
+const DRAFT_LINK_KEY = "demo-builder:draft-link";
 
-type SavedDemo = { id: string; savedAt: string; config: DemoConfig };
+type SavedDemo = { id: string; savedAt: string; config: DemoConfig; linkId?: string };
 
 function readSaved(): SavedDemo[] {
   try {
@@ -44,6 +45,7 @@ function readSaved(): SavedDemo[] {
           id: String(item.id),
           savedAt: String(item.savedAt),
           config: sanitizeDemoConfig(item.config),
+          ...(typeof item.linkId === "string" ? { linkId: item.linkId } : {}),
         }))
       : [];
   } catch {
@@ -76,6 +78,9 @@ export function Builder() {
   const [origin, setOrigin] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [currentId, setCurrentId] = useState<string | null>(null);
+  // Link curto (/s/...) desta demo; reenviar depois de editar atualiza o mesmo link.
+  const [linkId, setLinkId] = useState<string | null>(null);
+  const [linkLoading, setLinkLoading] = useState(false);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
   const [copied, setCopied] = useState(false);
@@ -105,10 +110,12 @@ export function Builder() {
     if (!loaded) return;
     try {
       window.localStorage.setItem(DRAFT_KEY, JSON.stringify(config));
+      if (linkId) window.localStorage.setItem(DRAFT_LINK_KEY, linkId);
+      else window.localStorage.removeItem(DRAFT_LINK_KEY);
     } catch {
       /* ignora */
     }
-  }, [config, loaded, sendToPreview]);
+  }, [config, linkId, loaded, sendToPreview]);
 
   useEffect(() => {
     if (!notice) return;
@@ -119,21 +126,86 @@ export function Builder() {
   const set = <K extends keyof DemoConfig>(key: K, value: DemoConfig[K]) =>
     setConfig((current) => ({ ...current, [key]: value }));
 
-  const shareUrl = `${origin}/site?d=${encodeDemoConfig(config)}`;
+  const longUrl = () => `${origin}/site?d=${encodeDemoConfig(config)}`;
+
+  /** Gera (ou atualiza) o link curto. Sem banco configurado, usa o link longo. */
+  const getShareUrl = async () => {
+    setLinkLoading(true);
+    try {
+      const response = await fetch("/api/links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: linkId, config }),
+      });
+      if (response.status === 401) {
+        window.location.href = "/login";
+        return null;
+      }
+      const payload = (await response.json().catch(() => null)) as { id?: string } | null;
+      if (!response.ok || !payload?.id) {
+        if (response.status === 503) setNotice("Banco de links não configurado: usando link longo.");
+        else setNotice("Não foi possível gerar o link curto: usando link longo.");
+        return longUrl();
+      }
+      setLinkId(payload.id);
+      if (currentId) {
+        const next = saved.map((item) =>
+          item.id === currentId ? { ...item, linkId: payload.id } : item,
+        );
+        setSaved(next);
+        writeSaved(next);
+      }
+      return `${origin}/s/${payload.id}`;
+    } catch {
+      setNotice("Sem conexão para gerar o link curto: usando link longo.");
+      return longUrl();
+    } finally {
+      setLinkLoading(false);
+    }
+  };
 
   const copyLink = async () => {
+    const url = await getShareUrl();
+    if (!url) return;
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(url);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      window.prompt("Copie o link da demonstração:", shareUrl);
+      window.prompt("Copie o link da demonstração:", url);
     }
   };
+
+  // A aba é aberta antes de esperar o link, senão o navegador bloqueia o pop-up.
+  const openWith = async (build: (url: string) => string) => {
+    const tab = window.open("about:blank", "_blank");
+    const url = await getShareUrl();
+    if (!url) {
+      tab?.close();
+      return;
+    }
+    if (tab) tab.location.href = build(url);
+    else window.location.href = build(url);
+  };
+
+  const openPreview = () => openWith((url) => url);
+
+  const sendToClient = () =>
+    openWith(
+      (url) =>
+        `https://wa.me/?text=${encodeURIComponent(
+          `Olá! Preparei uma prévia de como pode ficar o site${config.businessName ? ` da ${config.businessName}` : ""}, com agendamento online: ${url}`,
+        )}`,
+    );
 
   // O rascunho e as demos salvas ficam no navegador; carregados depois da renderização inicial.
   useEffect(() => {
     setConfig(readDraft());
+    try {
+      setLinkId(window.localStorage.getItem(DRAFT_LINK_KEY));
+    } catch {
+      /* ignora */
+    }
     setSaved(readSaved());
     setOrigin(window.location.origin);
     setLoaded(true);
@@ -173,6 +245,7 @@ export function Builder() {
       const result = payload;
       setConfig(result.config);
       setCurrentId(null);
+      setLinkId(null);
       setAiSummary(result.notes || "Site repaginado. Revise os dados abaixo.");
     } catch (error) {
       setAiError(error instanceof Error ? error.message : "Não foi possível importar com a IA.");
@@ -199,7 +272,12 @@ export function Builder() {
 
   const saveDemo = () => {
     const id = currentId ?? crypto.randomUUID();
-    const entry: SavedDemo = { id, savedAt: new Date().toISOString(), config };
+    const entry: SavedDemo = {
+      id,
+      savedAt: new Date().toISOString(),
+      config,
+      ...(linkId ? { linkId } : {}),
+    };
     const next = [entry, ...saved.filter((item) => item.id !== id)];
     setSaved(next);
     writeSaved(next);
@@ -210,6 +288,7 @@ export function Builder() {
   const loadDemo = (item: SavedDemo) => {
     setConfig(item.config);
     setCurrentId(item.id);
+    setLinkId(item.linkId ?? null);
     setNotice(`"${item.config.businessName || "Sem nome"}" carregada.`);
   };
 
@@ -223,11 +302,8 @@ export function Builder() {
   const newDemo = () => {
     setConfig(demoConfigFromSegment(config.segment));
     setCurrentId(null);
+    setLinkId(null);
   };
-
-  const whatsappShare = `https://wa.me/?text=${encodeURIComponent(
-    `Olá! Preparei uma prévia de como pode ficar o site${config.businessName ? ` da ${config.businessName}` : ""}, com agendamento online: ${shareUrl}`,
-  )}`;
 
   return (
     <main className="demo-page flex min-h-screen flex-col bg-background text-foreground lg:h-screen">
@@ -267,7 +343,7 @@ export function Builder() {
           >
             <Save size={14} aria-hidden="true" /> Salvar
           </Button>
-          <Button size="sm" onClick={copyLink}>
+          <Button size="sm" onClick={copyLink} disabled={linkLoading}>
             {copied ? (
               <Check size={14} aria-hidden="true" />
             ) : (
@@ -757,22 +833,22 @@ export function Builder() {
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <a
-                href={shareUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex h-9 items-center gap-1.5 px-3 text-xs font-bold uppercase text-muted-foreground hover:text-foreground"
+              <button
+                type="button"
+                onClick={openPreview}
+                disabled={linkLoading}
+                className="flex h-9 items-center gap-1.5 px-3 text-xs font-bold uppercase text-muted-foreground hover:text-foreground disabled:opacity-50"
               >
                 <ExternalLink size={15} aria-hidden="true" /> Abrir
-              </a>
-              <a
-                href={whatsappShare}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex h-9 items-center gap-1.5 bg-contact px-3 text-xs font-bold uppercase text-contact-foreground hover:opacity-90"
+              </button>
+              <button
+                type="button"
+                onClick={sendToClient}
+                disabled={linkLoading}
+                className="flex h-9 items-center gap-1.5 bg-contact px-3 text-xs font-bold uppercase text-contact-foreground hover:opacity-90 disabled:opacity-50"
               >
                 <Send size={14} aria-hidden="true" /> Enviar ao cliente
-              </a>
+              </button>
             </div>
           </div>
           <div className="flex min-h-[70vh] flex-1 justify-center overflow-auto p-0 sm:p-4 lg:min-h-0">
